@@ -4,8 +4,8 @@ import './App.css';
 function App() {
   const [city, setCity] = useState('');
   const [cityName, setName] = useState('Welcome');
-  const [result, setResult] = useState([]);
-  const [forecast, setForecast] = useState([]); // Store forecast data
+  const [result, setResult] = useState({});
+  const [forecast, setForecast] = useState([]);
   const [loading, setLoading] = useState(false);
 
   const getCity = (e) => {
@@ -14,14 +14,13 @@ function App() {
 
   async function fetchData(e) {
     e.preventDefault();
-    if (!city) return; // Ensure city is provided
+    if (!city) return;
 
     setLoading(true);
     setName(city);
 
     const token = 'a020c8b4fab16c5ecce5b73dbb4681e8';
     try {
-      // Fetch current weather data
       let response = await fetch(
         `https://api.openweathermap.org/data/2.5/weather?q=${city}&appid=${token}&units=metric`
       );
@@ -34,15 +33,14 @@ function App() {
         setResult({});
       }
 
-      // Fetch 5-day forecast data
       let forecastResponse = await fetch(
         `https://api.openweathermap.org/data/2.5/forecast?q=${city}&appid=${token}&units=metric`
       );
       let forecastData = await forecastResponse.json();
 
       if (forecastData.cod === '200') {
-        const dailyForecast = forecastData.list.filter((item, index) => index % 8 === 0); // Get the first data of each day (every 8th item)
-        setForecast(dailyForecast.slice(0, 6)); // Limit to 6 days (current + next 5 days)
+        const dailyForecast = forecastData.list.filter((item, index) => index % 8 === 0);
+        setForecast(dailyForecast.slice(0, 6)); 
       } else {
         alert('Error fetching forecast data');
         setForecast([]);
@@ -56,7 +54,6 @@ function App() {
     }
   }
 
-  // Get current location weather
   const getCurrentLocationWeather = () => {
     navigator.geolocation.getCurrentPosition(async (position) => {
       const { latitude, longitude } = position.coords;
@@ -71,20 +68,19 @@ function App() {
 
         if (data.cod === 200) {
           setResult(data);
-          setName(data.name); // Update city name to current location
+          setName(data.name); 
         } else {
           alert('Unable to get weather data for your location.');
         }
 
-        // Fetch 5-day forecast data
         let forecastResponse = await fetch(
           `https://api.openweathermap.org/data/2.5/forecast?lat=${latitude}&lon=${longitude}&appid=${token}&units=metric`
         );
         let forecastData = await forecastResponse.json();
 
         if (forecastData.cod === '200') {
-          const dailyForecast = forecastData.list.filter((item, index) => index % 8 === 0); // Get the first data of each day (every 8th item)
-          setForecast(dailyForecast.slice(0, 6)); // Limit to 6 days (current + next 5 days)
+          const dailyForecast = forecastData.list.filter((item, index) => index % 8 === 0);
+          setForecast(dailyForecast.slice(0, 6)); 
         } else {
           alert('Error fetching forecast data');
           setForecast([]);
@@ -120,13 +116,10 @@ function App() {
         </div>
         <span className="city-name">{cityName}</span>
       </div>
+
       <div className={result.main ? 'main-box' : 'none'}>
         <div className="box-one">
-          {result.main ? (
-            <span className="temp-text">{result.main.temp}°C</span>
-          ) : (
-            <span className="temp-text">--°C</span>
-          )}
+          <span className="temp-text">{result.main ? result.main.temp + '°C' : '--°C'}</span>
         </div>
         <div className="box-two">
           <span className="date-text">
@@ -148,36 +141,35 @@ function App() {
           </span>
         </div>
       </div>
-      <hr className={result.main ? 'ruler' : 'none'}/>
-      {/* Displaying 6-day forecast (current day + next 5 days) */}
+
+      <hr className={result.main ? 'ruler' : 'none'} />
+
       <div className="week-forecast">
-        {forecast.length > 0 ? (
+        {forecast.length > 0 &&
           forecast.map((item, index) => {
             const date = new Date(item.dt * 1000);
             return (
               <div className="col" key={index}>
-                <h3 className='day-name'>{date.toLocaleDateString('en-US', { weekday: 'short' })}</h3>
-                <br />
+                <h3 className="day-name">{date.toLocaleDateString('en-US', { weekday: 'short' })}</h3>
                 <img
                   src={`https://openweathermap.org/img/wn/${item.weather[0].icon}.png`}
                   alt={item.weather[0].description}
                   style={{ width: '42px', height: '42px' }}
                 />
-                <br />
                 <p className="weather">{item.weather[0].main}</p>
-                <span className='weather'>{Math.round(item.main.temp)}°</span>
+                <span className="weather">{Math.round(item.main.temp)}°</span>
               </div>
             );
-          })
-        ) : (
-          <p className={'error-msg'}>No data available.</p>
-        )}
+          })}
       </div>
-      <div className='dev-box'>
-        <p className='dev-text'>
-          Designed and coded by👉
-          <a href="https://github.com/yrj03" target="_blank" className='git-link'>Yuvraj</a
-          ><span>👨‍💻</span>
+
+      <div className="dev-box">
+        <p className="dev-text">
+          Designed and coded by 👉
+          <a href="https://github.com/yrj03" target="_blank" className="git-link">
+            Yuvraj
+          </a>
+          <span>👨‍💻</span>
         </p>
       </div>
     </div>
