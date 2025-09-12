@@ -1,176 +1,210 @@
-import { useState } from 'react';
-import './App.css';
+import { useState, useEffect } from 'react';
 
 function App() {
   const [city, setCity] = useState('');
-  const [cityName, setName] = useState('Welcome');
-  const [result, setResult] = useState({});
+  const [displayName, setDisplayName] = useState('Welcome');
+  const [weather, setWeather] = useState(null);
   const [forecast, setForecast] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState('');
 
-  const getCity = (e) => {
-    setCity(e.target.value);
-  };
+  const API_KEY = import.meta.env.VITE_OPENWEATHER_API_KEY; // store your key in env
 
-  async function fetchData(e) {
-    e.preventDefault();
-    if (!city) return;
-
-    setLoading(true);
-    setName(city);
-
-    const token = 'a020c8b4fab16c5ecce5b73dbb4681e8';
+  const fetchWeatherData = async (cityName) => {
     try {
       let response = await fetch(
-        `https://api.openweathermap.org/data/2.5/weather?q=${city}&appid=${token}&units=metric`
+        `https://api.openweathermap.org/data/2.5/weather?q=${cityName}&appid=${API_KEY}&units=metric`
       );
       let data = await response.json();
-
-      if (data.cod === 200) {
-        setResult(data);
-      } else {
-        alert('City not found!');
-        setResult({});
+      if (data.cod !== 200) {
+        throw new Error(data.message || 'City not found');
       }
+      return data;
+    } catch (err) {
+      throw err;
+    }
+  };
 
-      let forecastResponse = await fetch(
-        `https://api.openweathermap.org/data/2.5/forecast?q=${city}&appid=${token}&units=metric`
+  const fetchForecastData = async (cityName) => {
+    try {
+      let response = await fetch(
+        `https://api.openweathermap.org/data/2.5/forecast?q=${cityName}&appid=${API_KEY}&units=metric`
       );
-      let forecastData = await forecastResponse.json();
-
-      if (forecastData.cod === '200') {
-        const dailyForecast = forecastData.list.filter((item, index) => index % 8 === 0);
-        setForecast(dailyForecast.slice(0, 6)); 
-      } else {
-        alert('Error fetching forecast data');
-        setForecast([]);
+      let data = await response.json();
+      if (data.cod !== '200') {
+        throw new Error('Forecast not available');
       }
-    } catch (error) {
-      console.error(error);
-      alert('Error fetching data');
+      // pick every 8th item to get roughly daily forecasts
+      const daily = data.list.filter((item, idx) => idx % 8 === 0).slice(0, 6);
+      return daily;
+    } catch (err) {
+      throw err;
+    }
+  };
+
+  const handleSearch = async (e) => {
+    e.preventDefault();
+    if (!city.trim()) return;
+
+    setLoading(true);
+    setErrorMsg('');
+    setDisplayName(city);
+
+    try {
+      const weatherData = await fetchWeatherData(city);
+      setWeather(weatherData);
+
+      const forecastData = await fetchForecastData(city);
+      setForecast(forecastData);
+    } catch (err) {
+      setWeather(null);
+      setForecast([]);
+      setErrorMsg(err.message);
     } finally {
       setLoading(false);
       setCity('');
     }
-  }
+  };
 
-  const getCurrentLocationWeather = () => {
-    navigator.geolocation.getCurrentPosition(async (position) => {
-      const { latitude, longitude } = position.coords;
-      setLoading(true);
+  const handleLocation = () => {
+    if (!navigator.geolocation) {
+      setErrorMsg('Geolocation not supported');
+      return;
+    }
 
-      const token = 'a020c8b4fab16c5ecce5b73dbb4681e8';
-      try {
-        let response = await fetch(
-          `https://api.openweathermap.org/data/2.5/weather?lat=${latitude}&lon=${longitude}&appid=${token}&units=metric`
-        );
-        let data = await response.json();
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        setLoading(true);
+        setErrorMsg('');
+        const { latitude, longitude } = pos.coords;
+        try {
+          let response = await fetch(
+            `https://api.openweathermap.org/data/2.5/weather?lat=${latitude}&lon=${longitude}&appid=${API_KEY}&units=metric`
+          );
+          let data = await response.json();
+          if (data.cod !== 200) throw new Error('Unable to get weather for your location');
+          setWeather(data);
+          setDisplayName(data.name);
 
-        if (data.cod === 200) {
-          setResult(data);
-          setName(data.name); 
-        } else {
-          alert('Unable to get weather data for your location.');
-        }
-
-        let forecastResponse = await fetch(
-          `https://api.openweathermap.org/data/2.5/forecast?lat=${latitude}&lon=${longitude}&appid=${token}&units=metric`
-        );
-        let forecastData = await forecastResponse.json();
-
-        if (forecastData.cod === '200') {
-          const dailyForecast = forecastData.list.filter((item, index) => index % 8 === 0);
-          setForecast(dailyForecast.slice(0, 6)); 
-        } else {
-          alert('Error fetching forecast data');
+          let forecastResponse = await fetch(
+            `https://api.openweathermap.org/data/2.5/forecast?lat=${latitude}&lon=${longitude}&appid=${API_KEY}&units=metric`
+          );
+          let forecastData = await forecastResponse.json();
+          if (forecastData.cod !== '200') throw new Error('Forecast not available');
+          const daily = forecastData.list.filter((item, idx) => idx % 8 === 0).slice(0, 6);
+          setForecast(daily);
+        } catch (err) {
+          setWeather(null);
           setForecast([]);
+          setErrorMsg(err.message);
+        } finally {
+          setLoading(false);
         }
-      } catch (error) {
-        console.error(error);
-        alert('Error fetching data');
-      } finally {
-        setLoading(false);
+      },
+      (err) => {
+        setErrorMsg('Geolocation permission denied');
       }
-    });
+    );
   };
 
   return (
-    <div className="container">
-      <div className="input-box">
-        <form className="input-form" onSubmit={fetchData}>
+    <div className="min-h-screen bg-gradient-to-br from-blue-400 to-purple-600 flex items-center justify-center p-4">
+      <div className="bg-white rounded-3xl shadow-2xl max-w-xl w-full p-6 md:p-10 space-y-6">
+        {/* Header / Title */}
+        <h1 className="text-3xl font-bold text-center text-white bg-blue-600 bg-opacity-80 rounded-lg p-4 shadow-md">
+          Weather 🌤️
+        </h1>
+
+        {/* Search & Location */}
+        <form onSubmit={handleSearch} className="flex flex-col sm:flex-row gap-3">
           <input
             type="text"
-            onChange={getCity}
-            placeholder="Enter Your City Name..."
-            className="input"
+            className="flex-1 px-4 py-2 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            placeholder="Enter city name"
             value={city}
+            onChange={(e) => setCity(e.target.value)}
           />
-          <button type="submit" className="submit-btn" disabled={loading}>
-            {loading ? 'Loading...' : 'Search'}
+          <button
+            type="submit"
+            className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition"
+            disabled={loading}
+          >
+            {loading ? 'Searching...' : 'Search'}
+          </button>
+          <button
+            type="button"
+            className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition"
+            onClick={handleLocation}
+            disabled={loading}
+          >
+            Use My Location
           </button>
         </form>
-        <div>
-          <button className="location-btn" onClick={getCurrentLocationWeather}>
-            Current Location
-          </button>
-        </div>
-        <span className="city-name">{cityName}</span>
-      </div>
 
-      <div className={result.main ? 'main-box' : 'none'}>
-        <div className="box-one">
-          <span className="temp-text">{result.main ? result.main.temp + '°C' : '--°C'}</span>
-        </div>
-        <div className="box-two">
-          <span className="date-text">
-            Date:{result.sys ? new Date(result.dt * 1000).toLocaleTimeString() : '--:--'}
-          </span>
-          <span className="day-text">
-            Day:{result.sys ? new Date(result.dt * 1000).toLocaleString('en-US', { weekday: 'long' }) : '---'}
-          </span>
-          <span className="sky-text">
-            Weather:{result.weather ? result.weather[0].main : '---'}
-          </span>
-        </div>
-        <div className="box-three">
-          <span className="humidity-text">
-            Humidity:{result.main ? result.main.humidity : '--'}%
-          </span>
-          <span className="wind-text">
-            Wind:{result.wind ? result.wind.speed : '--'} m/s
-          </span>
-        </div>
-      </div>
+        {/* Display error message */}
+        {errorMsg && (
+          <div className="text-red-500 text-center">
+            {errorMsg}
+          </div>
+        )}
 
-      <hr className={result.main ? 'ruler' : 'none'} />
-
-      <div className="week-forecast">
-        {forecast.length > 0 &&
-          forecast.map((item, index) => {
-            const date = new Date(item.dt * 1000);
-            return (
-              <div className="col" key={index}>
-                <h3 className="day-name">{date.toLocaleDateString('en-US', { weekday: 'short' })}</h3>
-                <img
-                  src={`https://openweathermap.org/img/wn/${item.weather[0].icon}.png`}
-                  alt={item.weather[0].description}
-                  style={{ width: '42px', height: '42px' }}
-                />
-                <p className="weather">{item.weather[0].main}</p>
-                <span className="weather">{Math.round(item.main.temp)}°</span>
+        {/* Weather Info */}
+        {weather && (
+          <div className="space-y-4">
+            <div className="text-center space-y-2">
+              <div className="text-5xl font-bold text-gray-900">
+                {Math.round(weather.main.temp)}°C
               </div>
-            );
-          })}
-      </div>
+              <div className="text-lg text-gray-700">
+                {displayName}, {weather.sys.country}
+              </div>
+              <div className="capitalize text-gray-600">
+                {weather.weather[0].description}
+              </div>
+            </div>
 
-      <div className="dev-box">
-        <p className="dev-text">
-          Designed and coded by 👉
-          <a href="https://github.com/yrj03" target="_blank" className="git-link">
-            Yuvraj
-          </a>
-          <span>👨‍💻</span>
-        </p>
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+              <div className="bg-blue-100 bg-opacity-50 rounded-xl p-4 flex flex-col items-center">
+                <span className="text-sm text-gray-600">Humidity</span>
+                <span className="font-semibold text-gray-800">{weather.main.humidity}%</span>
+              </div>
+              <div className="bg-blue-100 bg-opacity-50 rounded-xl p-4 flex flex-col items-center">
+                <span className="text-sm text-gray-600">Wind Speed</span>
+                <span className="font-semibold text-gray-800">{weather.wind.speed} m/s</span>
+              </div>
+              <div className="bg-blue-100 bg-opacity-50 rounded-xl p-4 flex flex-col items-center">
+                <span className="text-sm text-gray-600">Feels Like</span>
+                <span className="font-semibold text-gray-800">{Math.round(weather.main.feels_like)}°C</span>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Forecast */}
+        {forecast.length > 0 && (
+          <div className="mt-6">
+            <h2 className="text-xl font-semibold text-gray-800 mb-4">6‑Day Forecast</h2>
+            <div className="grid grid-cols-3 sm:grid-cols-6 gap-3">
+              {forecast.map((item, idx) => {
+                const date = new Date(item.dt * 1000);
+                return (
+                  <div key={idx} className="bg-white bg-opacity-80 rounded-xl p-3 flex flex-col items-center shadow">
+                    <div className="text-sm text-gray-600">
+                      {date.toLocaleDateString('en-US', { weekday: 'short' })}
+                    </div>
+                    <img
+                      src={`https://openweathermap.org/img/wn/${item.weather[0].icon}@2x.png`}
+                      alt={item.weather[0].description}
+                      className="w-12 h-12"
+                    />
+                    <div className="capitalize text-gray-700 text-sm">{item.weather[0].main}</div>
+                    <div className="font-semibold text-lg">{Math.round(item.main.temp)}°</div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
